@@ -188,10 +188,10 @@
         </div>
     </div>
 
-    <!-- FIREBASE MODULE SCRIPT -->
+<!-- FIREBASE MODULE SCRIPT -->
     <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-app.js";
-        import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-firestore.js";
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.10.0/firebase-app.js";
+        import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.10.0/firebase-firestore.js";
 
         // Your specific Firebase configuration
         const firebaseConfig = {
@@ -203,7 +203,6 @@
             appId: "1:1018410531529:web:3dc699ab756181d46a6b18",
             measurementId: "G-PYW3G8EK0T"
         };
-
         // Initialize Firebase
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
