@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Workout Tracker</title>
+    <style>
+        :root {
+            --primary: #00e676;
+            --bg: #121212;
+            --surface: #1e1e1e;
+            --text: #ffffff;
+            --text-muted: #a0a0a0;
+            --border: #333333;
+        }
+        
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; }
+        body { background-color: var(--bg); color: var(--text); overflow-x: hidden; overscroll-behavior-y: none; }
+        
+        /* Views */
+        .view { display: none; width: 100vw; min-height: 100vh; position: relative; }
+        .view.active { display: block; }
+        
+        /* Loading Screen */
+        #loading-view { display: flex; align-items: center; justify-content: center; font-size: 20px; color: var(--primary); font-weight: bold; height: 100vh;}
+
+        /* Floating Back Button */
+        #back-btn {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            z-index: 1000;
+            background: rgba(30, 30, 30, 0.7);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            color: var(--text);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 50%;
+            width: 45px;
+            height: 45px;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            cursor: pointer;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+        }
+
+        /* Home View (Stacked Images) */
+        #days-container { display: flex; flex-direction: column; height: 100vh; }
+        .day-card {
+            flex: 1;
+            position: relative;
+            cursor: pointer;
+            background-size: cover;
+            background-position: center;
+            border-bottom: 2px solid var(--bg);
+        }
+        .day-card.last-completed::after {
+            content: "Last Workout";
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            background: var(--primary);
+            color: #000;
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: bold;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+        }
+
+        /* Exercises List (Stacked Images) */
+        #exercises-container { display: flex; flex-direction: column; min-height: 100vh; padding-bottom: 80px; }
+        .exercise-item {
+            height: 25vh; /* Distributes height based on amount */
+            min-height: 150px;
+            position: relative;
+            cursor: pointer;
+            background-size: cover;
+            background-position: center;
+            border-bottom: 2px solid var(--bg);
+        }
+        .finish-workout-btn {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            padding: 20px;
+            background: var(--primary);
+            color: #000;
+            border: none;
+            font-size: 18px;
+            font-weight: bold;
+            cursor: pointer;
+            z-index: 100;
+        }
+
+        /* Exercise Details (Tabs) */
+        #exercise-view { padding-top: 80px; }
+        .tabs { display: flex; background: var(--surface); position: sticky; top: 0; z-index: 50; }
+        .tab { flex: 1; text-align: center; padding: 15px; cursor: pointer; color: var(--text-muted); font-weight: 500; border-bottom: 2px solid transparent; transition: 0.2s ease; }
+        .tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+        .tab-content { display: none; padding: 20px; }
+        .tab-content.active { display: block; }
+
+        /* Inputs & Buttons */
+        input { background: var(--bg); color: var(--text); border: 1px solid var(--border); padding: 15px; border-radius: 10px; font-size: 16px; width: 100%; outline: none; }
+        input:focus { border-color: var(--primary); }
+        button.action-btn { background: var(--surface); color: var(--primary); border: 1px solid var(--primary); padding: 15px; border-radius: 10px; font-size: 16px; font-weight: bold; cursor: pointer; width: 100%; margin-top: 10px; }
+        button.action-btn.solid { background: var(--primary); color: #000; }
+
+        /* Logging Layout */
+        .log-inputs { display: flex; gap: 10px; margin-bottom: 15px; }
+        .log-inputs input { flex: 1; text-align: center; }
+        .current-session-list { margin-top: 20px; }
+        .set-row { display: flex; justify-content: space-between; background: var(--surface); padding: 15px; border-radius: 10px; margin-bottom: 10px; font-size: 16px; }
+        
+        /* History Layout */
+        .history-card { background: var(--surface); border-radius: 10px; padding: 15px; margin-bottom: 15px; border: 1px solid var(--border); }
+        .history-date { color: var(--primary); font-weight: bold; margin-bottom: 10px; font-size: 14px; }
+        .history-set { display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid var(--border); color: var(--text-muted); }
+        .history-set:last-child { border-bottom: none; }
+
+        /* Timer */
+        .timer-display { font-size: 80px; font-weight: 200; text-align: center; margin: 40px 0; color: var(--primary); font-variant-numeric: tabular-nums; }
+        .timer-controls { display: flex; gap: 10px; }
+        .timer-controls button { flex: 1; }
+    </style>
+</head>
+<body>
+
+    <!-- Floating Back Button -->
+    <button id="back-btn" onclick="goBack()">&#8592;</button>
+
+    <!-- LOADING VIEW -->
+    <div id="loading-view" class="view active">
+        Loading Database...
+    </div>
+
+    <!-- HOME VIEW -->
+    <div id="home-view" class="view">
+        <div id="days-container"></div>
+    </div>
+
+    <!-- DAY VIEW (List of Exercises) -->
+    <div id="day-view" class="view">
+        <div id="exercises-container"></div>
+        <button class="finish-workout-btn" onclick="finishWorkout()">Complete Workout Day</button>
+    </div>
+
+    <!-- EXERCISE VIEW -->
+    <div id="exercise-view" class="view">
+        <div class="tabs">
+            <div class="tab active" onclick="switchTab('log')">Log</div>
+            <div class="tab" onclick="switchTab('timer')">Timer</div>
+            <div class="tab" onclick="switchTab('history')">History</div>
+        </div>
+
+        <!-- Log Tab -->
+        <div id="tab-log" class="tab-content active">
+            <h3 style="margin-bottom: 15px;">New Set</h3>
+            <div class="log-inputs">
+                <input type="number" id="input-reps" placeholder="Reps">
+                <input type="number" id="input-weight" placeholder="Weight">
+            </div>
+            <button class="action-btn" onclick="addSet()">+ Add Set</button>
+
+            <div class="current-session-list" id="current-session-list"></div>
+
+            <button class="action-btn solid" style="margin-top: 30px;" onclick="finishExercise()">Finish Exercise</button>
+        </div>
+
+        <!-- Timer Tab -->
+        <div id="tab-timer" class="tab-content">
+            <p style="text-align: center; color: var(--text-muted);">Rest Time (Seconds)</p>
+            <input type="number" id="timer-input" value="60" style="text-align: center; margin-top: 10px;">
+            <div class="timer-display" id="timer-display">01:00</div>
+            <div class="timer-controls">
+                <button class="action-btn solid" onclick="startTimer()">Start</button>
+                <button class="action-btn" onclick="stopTimer()">Stop</button>
+            </div>
+        </div>
+
+        <!-- History Tab -->
+        <div id="tab-history" class="tab-content">
+            <div id="history-container"></div>
+        </div>
+    </div>
+
+    <!-- FIREBASE MODULE SCRIPT -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-app.js";
+        import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-firestore.js";
+
+        // Your specific Firebase configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyAarVmDywqA2D2f-K9GtAOn-4TujJdBA64",
+            authDomain: "gymtracker-d3e85.firebaseapp.com",
+            projectId: "gymtracker-d3e85",
+            storageBucket: "gymtracker-d3e85.firebasestorage.app",
+            messagingSenderId: "1018410531529",
+            appId: "1:1018410531529:web:3dc699ab756181d46a6b18",
+            measurementId: "G-PYW3G8EK0T"
+        };
+
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        
+        // Storing all user data in a single document "my_data" inside the "users" collection
+        const docRef = doc(db, "users", "my_data");
+
+        // --- DATA STRUCTURE (LOCAL IMAGES) ---
+        const workoutData = [
+            { id: 0, image: "tab1-chest.jpg", exercises: [
+                { id: "c1", image: "chest1.jpg" },
+                { id: "c2", image: "chest2.jpg" },
+                { id: "c3", image: "chest3.jpg" },
+                { id: "c4", image: "chest4.jpg" },
+                { id: "c5", image: "chest5.jpg" }
+            ]},
+            { id: 1, image: "tab1-back.jpg", exercises: [
+                { id: "b1", image: "back1.jpg" },
+                { id: "b2", image: "back2.jpg" },
+                { id: "b3", image: "back3.jpg" },
+                { id: "b4", image: "back4.jpg" },
+                { id: "b5", image: "back5.jpg" }
+            ]},
+            { id: 2, image: "tab1-core.jpg", exercises: [
+                { id: "co1", image: "core1.jpg" },
+                { id: "co2", image: "core2.jpg" },
+                { id: "co3", image: "core3.jpg" },
+                { id: "co4", image: "core4.jpg" },
+                { id: "co5", image: "core5.jpg" },
+                { id: "co6", image: "core6.jpg" }
+            ]}
+        ];
+
+        let state = {
+            lastCompletedDay: null,
+            history: {} 
+        };
+
+        let currentDayId = null;
+        let currentExerciseId = null;
+        let currentSessionSets = [];
+        let timerInterval = null;
+        let wakeLock = null;
+
+        // --- FIREBASE SAVE & LOAD ---
+        async function loadState() {
+            try {
+                const docSnap = await getDoc(docRef);
+                if (docSnap.exists()) {
+                    state = docSnap.data();
+                } else {
+                    // Create default structure if no data exists
+                    await setDoc(docRef, state);
+                }
+            } catch (error) {
+                console.error("Error loading data from Firebase: ", error);
+                alert("Could not connect to database. Please check your internet or Firebase Rules.");
+            }
+            // THIS LINE is the fix that moves the app from loading to the home screen
+            window.showView('home-view');
+        }
+
+        async function saveState() {
+            try {
+                await setDoc(docRef, state);
+            } catch (error) {
+                console.error("Error saving data to Firebase: ", error);
+            }
+        }
+
+        // --- NAVIGATION (Exposed to window so HTML buttons can see them) ---
+        window.showView = function(viewId) {
+            document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+            document.getElementById(viewId).classList.add('active');
+            
+            const backBtn = document.getElementById('back-btn');
+            if(viewId === 'home-view' || viewId === 'loading-view') {
+                backBtn.style.display = 'none';
+                if(viewId === 'home-view') renderHome();
+            } else {
+                backBtn.style.display = 'flex';
+            }
+        }
+
+        window.goBack = function() {
+            if (document.getElementById('exercise-view').classList.contains('active')) {
+                window.showView('day-view');
+                window.stopTimer();
+            } else if (document.getElementById('day-view').classList.contains('active')) {
+                window.showView('home-view');
+            }
+        }
+
+        window.switchTab = function(tabName) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            event.target.classList.add('active');
+            document.getElementById('tab-' + tabName).classList.add('active');
+        }
+
+        // --- RENDERING ---
+        function renderHome() {
+            const container = document.getElementById('days-container');
+            container.innerHTML = '';
+            
+            workoutData.forEach(day => {
+                const isLast = state.lastCompletedDay === day.id;
+                container.innerHTML += `
+                    <div class="day-card ${isLast ? 'last-completed' : ''}" 
+                         style="background-image: url('${day.image}');" 
+                         onclick="openDay(${day.id})">
+                    </div>
+                `;
+            });
+        }
+
+        window.openDay = function(dayId) {
+            currentDayId = dayId;
+            const dayData = workoutData.find(d => d.id === dayId);
+            
+            const container = document.getElementById('exercises-container');
+            container.innerHTML = '';
+            
+            dayData.exercises.forEach(ex => {
+                container.innerHTML += `
+                    <div class="exercise-item" 
+                         style="background-image: url('${ex.image}');" 
+                         onclick="openExercise('${ex.id}')">
+                    </div>
+                `;
+            });
+            
+            window.showView('day-view');
+        }
+
+        window.openExercise = function(exId) {
+            currentExerciseId = exId;
+            currentSessionSets = []; 
+            
+            document.getElementById('input-reps').value = '';
+            document.getElementById('input-weight').value = '';
+            
+            renderCurrentSession();
+            renderHistory();
+            
+            window.stopTimer();
+            document.getElementById('timer-display').innerText = formatTime(document.getElementById('timer-input').value);
+            
+            window.showView('exercise-view');
+            document.querySelectorAll('.tab')[0].click(); 
+        }
+
+        // --- LOGGING ---
+        window.addSet = function() {
+            const reps = document.getElementById('input-reps').value;
+            const weight = document.getElementById('input-weight').value;
+
+            if (!reps) {
+                alert("Please enter reps before adding the set.");
+                return;
+            }
+
+            currentSessionSets.push({ reps, weight });
+            document.getElementById('input-reps').value = '';
+            document.getElementById('input-weight').value = '';
+            
+            renderCurrentSession();
+        }
+
+        function renderCurrentSession() {
+            const container = document.getElementById('current-session-list');
+            if (currentSessionSets.length === 0) {
+                container.innerHTML = '';
+                return;
+            }
+
+            container.innerHTML = `<h4 style="margin-bottom: 10px; color: var(--text-muted);">Current Session</h4>`;
+            currentSessionSets.forEach((set, index) => {
+                container.innerHTML += `
+                    <div class="set-row">
+                        <span>Set ${index + 1}</span>
+                        <span>${set.reps} Reps</span>
+                        <span>${set.weight ? set.weight + ' weight' : 'Bodyweight'}</span>
+                    </div>
+                `;
+            });
+        }
+
+        window.finishExercise = async function() {
+            if (currentSessionSets.length === 0) {
+                alert("You haven't added any sets yet!");
+                return;
+            }
+
+            if (!state.history[currentExerciseId]) state.history[currentExerciseId] = [];
+            
+            state.history[currentExerciseId].push({
+                date: new Date().toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }) + 
+                      ' ' + new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+                sets: [...currentSessionSets]
+            });
+
+            await saveState(); // Save to Firebase
+            currentSessionSets = []; 
+            
+            alert("Exercise Saved to Database!");
+            window.goBack(); 
+        }
+
+        window.finishWorkout = async function() {
+            state.lastCompletedDay = currentDayId;
+            await saveState(); // Save to Firebase
+            window.showView('home-view');
+        }
+
+        // --- HISTORY ---
+        function renderHistory() {
+            const container = document.getElementById('history-container');
+            const exHistory = state.history[currentExerciseId] || [];
+            
+            if (exHistory.length === 0) {
+                container.innerHTML = '<p style="color:var(--text-muted); text-align:center;">No history yet. Log a session!</p>';
+                return;
+            }
+            
+            container.innerHTML = exHistory.slice().reverse().map(session => `
+                <div class="history-card">
+                    <div class="history-date">${session.date}</div>
+                    ${session.sets.map((set, index) => `
+                        <div class="history-set">
+                            <span>Set ${index + 1}</span>
+                            <span>${set.reps} Reps</span>
+                            <span>${set.weight ? set.weight : '-'}</span>
+                        </div>
+                    `).join('')}
+                </div>
+            `).join('');
+        }
+
+        // --- TIMER ---
+        let timeRemaining = 0;
+        
+        function formatTime(seconds) {
+            const m = Math.floor(seconds / 60).toString().padStart(2, '0');
+            const s = (seconds % 60).toString().padStart(2, '0');
+            return `${m}:${s}`;
+        }
+
+        function playBeep() {
+            const AudioContext = window.AudioContext || window.webkitAudioContext;
+            if (!AudioContext) return;
+            const ctx = new AudioContext();
+            
+            for(let i=0; i<3; i++) {
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(880, ctx.currentTime + (i * 0.3)); 
+                gain.gain.setValueAtTime(1, ctx.currentTime + (i * 0.3));
+                gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + (i * 0.3) + 0.2);
+                
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.start(ctx.currentTime + (i * 0.3));
+                osc.stop(ctx.currentTime + (i * 0.3) + 0.2);
+            }
+        }
+
+        async function requestWakeLock() {
+            try {
+                if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen');
+            } catch (err) {
+                console.log(`Wake Lock Error: ${err.message}`);
+            }
+        }
+
+        function releaseWakeLock() {
+            if (wakeLock !== null) {
+                wakeLock.release().then(() => { wakeLock = null; });
+            }
+        }
+
+        window.startTimer = function() {
+            window.stopTimer();
+            requestWakeLock(); 
+            
+            timeRemaining = parseInt(document.getElementById('timer-input').value) || 60;
+            document.getElementById('timer-display').innerText = formatTime(timeRemaining);
+            
+            timerInterval = setInterval(() => {
+                timeRemaining--;
+                document.getElementById('timer-display').innerText = formatTime(timeRemaining);
+                
+                if (timeRemaining <= 0) {
+                    window.stopTimer();
+                    playBeep();
+                }
+            }, 1000);
+        }
+
+        window.stopTimer = function() {
+            if (timerInterval) clearInterval(timerInterval);
+            releaseWakeLock(); 
+        }
+
+        // Start App by loading data from Firebase
+        loadState();
+
+    </script>
+</body>
+</html>
