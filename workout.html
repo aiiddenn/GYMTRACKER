@@ -188,12 +188,27 @@
         </div>
     </div>
 
-<!-- FIREBASE MODULE SCRIPT -->
+    <!-- THE ULTIMATE FAILSAFE -->
+    <script>
+        // If the Firebase script fails to load entirely, this guarantees the app will unlock after 3 seconds.
+        setTimeout(() => {
+            const loadingScreen = document.getElementById('loading-view');
+            if (loadingScreen.classList.contains('active')) {
+                console.warn("Failsafe activated: Bypassing Firebase and opening app locally.");
+                document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+                document.getElementById('home-view').classList.add('active');
+                if (typeof renderHome === "function") renderHome();
+            }
+        }, 3000);
+    </script>
+
+    <!-- FIREBASE MODULE SCRIPT -->
     <script type="module">
+        console.log("Starting Firebase connection...");
+
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.10.0/firebase-app.js";
         import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.10.0/firebase-firestore.js";
 
-        // Your specific Firebase configuration
         const firebaseConfig = {
             apiKey: "AIzaSyAarVmDywqA2D2f-K9GtAOn-4TujJdBA64",
             authDomain: "gymtracker-d3e85.firebaseapp.com",
@@ -203,15 +218,13 @@
             appId: "1:1018410531529:web:3dc699ab756181d46a6b18",
             measurementId: "G-PYW3G8EK0T"
         };
-        // Initialize Firebase
+
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
-        
-        // Storing all user data in a single document "my_data" inside the "users" collection
         const docRef = doc(db, "users", "my_data");
 
         // --- DATA STRUCTURE (LOCAL IMAGES) ---
-        const workoutData = [
+        window.workoutData = [
             { id: 0, image: "tab1-chest.jpg", exercises: [
                 { id: "c1", image: "chest1.jpg" },
                 { id: "c2", image: "chest2.jpg" },
@@ -236,44 +249,45 @@
             ]}
         ];
 
-        let state = {
+        window.state = {
             lastCompletedDay: null,
             history: {} 
         };
 
-        let currentDayId = null;
-        let currentExerciseId = null;
-        let currentSessionSets = [];
-        let timerInterval = null;
-        let wakeLock = null;
+        window.currentDayId = null;
+        window.currentExerciseId = null;
+        window.currentSessionSets = [];
+        window.timerInterval = null;
+        window.wakeLock = null;
 
         // --- FIREBASE SAVE & LOAD ---
         async function loadState() {
             try {
+                console.log("Fetching data from Firestore...");
                 const docSnap = await getDoc(docRef);
                 if (docSnap.exists()) {
-                    state = docSnap.data();
+                    console.log("Data loaded successfully!");
+                    window.state = docSnap.data();
                 } else {
-                    // Create default structure if no data exists
-                    await setDoc(docRef, state);
+                    console.log("No data found, creating default save.");
+                    await setDoc(docRef, window.state);
                 }
             } catch (error) {
-                console.error("Error loading data from Firebase: ", error);
-                alert("Could not connect to database. Please check your internet or Firebase Rules.");
+                console.error("Firebase connection error: ", error);
             }
-            // THIS LINE is the fix that moves the app from loading to the home screen
             window.showView('home-view');
         }
 
-        async function saveState() {
+        window.saveState = async function() {
             try {
-                await setDoc(docRef, state);
+                await setDoc(docRef, window.state);
+                console.log("Saved to database!");
             } catch (error) {
-                console.error("Error saving data to Firebase: ", error);
+                console.error("Error saving data: ", error);
             }
         }
 
-        // --- NAVIGATION (Exposed to window so HTML buttons can see them) ---
+        // --- NAVIGATION ---
         window.showView = function(viewId) {
             document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
             document.getElementById(viewId).classList.add('active');
@@ -281,7 +295,7 @@
             const backBtn = document.getElementById('back-btn');
             if(viewId === 'home-view' || viewId === 'loading-view') {
                 backBtn.style.display = 'none';
-                if(viewId === 'home-view') renderHome();
+                if(viewId === 'home-view') window.renderHome();
             } else {
                 backBtn.style.display = 'flex';
             }
@@ -304,12 +318,12 @@
         }
 
         // --- RENDERING ---
-        function renderHome() {
+        window.renderHome = function() {
             const container = document.getElementById('days-container');
             container.innerHTML = '';
             
-            workoutData.forEach(day => {
-                const isLast = state.lastCompletedDay === day.id;
+            window.workoutData.forEach(day => {
+                const isLast = window.state.lastCompletedDay === day.id;
                 container.innerHTML += `
                     <div class="day-card ${isLast ? 'last-completed' : ''}" 
                          style="background-image: url('${day.image}');" 
@@ -320,8 +334,8 @@
         }
 
         window.openDay = function(dayId) {
-            currentDayId = dayId;
-            const dayData = workoutData.find(d => d.id === dayId);
+            window.currentDayId = dayId;
+            const dayData = window.workoutData.find(d => d.id === dayId);
             
             const container = document.getElementById('exercises-container');
             container.innerHTML = '';
@@ -339,17 +353,17 @@
         }
 
         window.openExercise = function(exId) {
-            currentExerciseId = exId;
-            currentSessionSets = []; 
+            window.currentExerciseId = exId;
+            window.currentSessionSets = []; 
             
             document.getElementById('input-reps').value = '';
             document.getElementById('input-weight').value = '';
             
-            renderCurrentSession();
-            renderHistory();
+            window.renderCurrentSession();
+            window.renderHistory();
             
             window.stopTimer();
-            document.getElementById('timer-display').innerText = formatTime(document.getElementById('timer-input').value);
+            document.getElementById('timer-display').innerText = window.formatTime(document.getElementById('timer-input').value);
             
             window.showView('exercise-view');
             document.querySelectorAll('.tab')[0].click(); 
@@ -365,22 +379,22 @@
                 return;
             }
 
-            currentSessionSets.push({ reps, weight });
+            window.currentSessionSets.push({ reps, weight });
             document.getElementById('input-reps').value = '';
             document.getElementById('input-weight').value = '';
             
-            renderCurrentSession();
+            window.renderCurrentSession();
         }
 
-        function renderCurrentSession() {
+        window.renderCurrentSession = function() {
             const container = document.getElementById('current-session-list');
-            if (currentSessionSets.length === 0) {
+            if (window.currentSessionSets.length === 0) {
                 container.innerHTML = '';
                 return;
             }
 
             container.innerHTML = `<h4 style="margin-bottom: 10px; color: var(--text-muted);">Current Session</h4>`;
-            currentSessionSets.forEach((set, index) => {
+            window.currentSessionSets.forEach((set, index) => {
                 container.innerHTML += `
                     <div class="set-row">
                         <span>Set ${index + 1}</span>
@@ -392,36 +406,36 @@
         }
 
         window.finishExercise = async function() {
-            if (currentSessionSets.length === 0) {
+            if (window.currentSessionSets.length === 0) {
                 alert("You haven't added any sets yet!");
                 return;
             }
 
-            if (!state.history[currentExerciseId]) state.history[currentExerciseId] = [];
+            if (!window.state.history[window.currentExerciseId]) window.state.history[window.currentExerciseId] = [];
             
-            state.history[currentExerciseId].push({
+            window.state.history[window.currentExerciseId].push({
                 date: new Date().toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }) + 
                       ' ' + new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
-                sets: [...currentSessionSets]
+                sets: [...window.currentSessionSets]
             });
 
-            await saveState(); // Save to Firebase
-            currentSessionSets = []; 
+            await window.saveState();
+            window.currentSessionSets = []; 
             
             alert("Exercise Saved to Database!");
             window.goBack(); 
         }
 
         window.finishWorkout = async function() {
-            state.lastCompletedDay = currentDayId;
-            await saveState(); // Save to Firebase
+            window.state.lastCompletedDay = window.currentDayId;
+            await window.saveState();
             window.showView('home-view');
         }
 
         // --- HISTORY ---
-        function renderHistory() {
+        window.renderHistory = function() {
             const container = document.getElementById('history-container');
-            const exHistory = state.history[currentExerciseId] || [];
+            const exHistory = window.state.history[window.currentExerciseId] || [];
             
             if (exHistory.length === 0) {
                 container.innerHTML = '<p style="color:var(--text-muted); text-align:center;">No history yet. Log a session!</p>';
@@ -443,15 +457,15 @@
         }
 
         // --- TIMER ---
-        let timeRemaining = 0;
+        window.timeRemaining = 0;
         
-        function formatTime(seconds) {
+        window.formatTime = function(seconds) {
             const m = Math.floor(seconds / 60).toString().padStart(2, '0');
             const s = (seconds % 60).toString().padStart(2, '0');
             return `${m}:${s}`;
         }
 
-        function playBeep() {
+        window.playBeep = function() {
             const AudioContext = window.AudioContext || window.webkitAudioContext;
             if (!AudioContext) return;
             const ctx = new AudioContext();
@@ -471,46 +485,45 @@
             }
         }
 
-        async function requestWakeLock() {
+        window.requestWakeLock = async function() {
             try {
-                if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen');
+                if ('wakeLock' in navigator) window.wakeLock = await navigator.wakeLock.request('screen');
             } catch (err) {
                 console.log(`Wake Lock Error: ${err.message}`);
             }
         }
 
-        function releaseWakeLock() {
-            if (wakeLock !== null) {
-                wakeLock.release().then(() => { wakeLock = null; });
+        window.releaseWakeLock = function() {
+            if (window.wakeLock !== null) {
+                window.wakeLock.release().then(() => { window.wakeLock = null; });
             }
         }
 
         window.startTimer = function() {
             window.stopTimer();
-            requestWakeLock(); 
+            window.requestWakeLock(); 
             
-            timeRemaining = parseInt(document.getElementById('timer-input').value) || 60;
-            document.getElementById('timer-display').innerText = formatTime(timeRemaining);
+            window.timeRemaining = parseInt(document.getElementById('timer-input').value) || 60;
+            document.getElementById('timer-display').innerText = window.formatTime(window.timeRemaining);
             
-            timerInterval = setInterval(() => {
-                timeRemaining--;
-                document.getElementById('timer-display').innerText = formatTime(timeRemaining);
+            window.timerInterval = setInterval(() => {
+                window.timeRemaining--;
+                document.getElementById('timer-display').innerText = window.formatTime(window.timeRemaining);
                 
-                if (timeRemaining <= 0) {
+                if (window.timeRemaining <= 0) {
                     window.stopTimer();
-                    playBeep();
+                    window.playBeep();
                 }
             }, 1000);
         }
 
         window.stopTimer = function() {
-            if (timerInterval) clearInterval(timerInterval);
-            releaseWakeLock(); 
+            if (window.timerInterval) clearInterval(window.timerInterval);
+            window.releaseWakeLock(); 
         }
 
-        // Start App by loading data from Firebase
+        // Start App
         loadState();
-
     </script>
 </body>
 </html>
